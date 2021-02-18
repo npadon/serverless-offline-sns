@@ -263,11 +263,19 @@ export class SNSServer implements ISNSServer {
         const subEndpointUrl = new URL(sub.Endpoint);
         const sqsEndpoint = `${subEndpointUrl.protocol}//${subEndpointUrl.host}/`;
         const sqs = new SQS({ endpoint: sqsEndpoint, region: this.region });
-
+        // No parsing if raw message delivery
         if (sub["Attributes"]["RawMessageDelivery"] === "true") {
             return sqs.sendMessage({
                 QueueUrl: sub.Endpoint,
                 MessageBody: event,
+            }).promise();
+        }
+        // Account for local SQS-SNS subscriptions
+        // https://docs.aws.amazon.com/sns/latest/dg/sns-sqs-as-subscriber.html
+        else if (JSON.parse(event).Records === undefined) {
+            return sqs.sendMessage({
+                QueueUrl: sub.Endpoint,
+                MessageBody: JSON.parse(event).Message
             }).promise();
         } else {
             const records = JSON.parse(event).Records;
@@ -282,6 +290,7 @@ export class SNSServer implements ISNSServer {
             return Promise.all(messagePromises);
         }
     }
+
 
     public publish(topicArn, subject, message, messageStructure, messageAttributes) {
         const messageId = createMessageId();
